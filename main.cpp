@@ -16,15 +16,6 @@ constexpr int resolution = WIDTH * HEIGHT;
 
 using namespace std;
 
-template<size_t N>
-constexpr int unroll() {
-    int x = 0;
-    for(int i = 0; i < N; ++i) {
-        x++;
-    }
-    return x;
-};
-
 enum Material {
 	Diffuse,
 	Specular,
