@@ -16,6 +16,15 @@ constexpr int resolution = WIDTH * HEIGHT;
 
 using namespace std;
 
+template<size_t N>
+constexpr int unroll() {
+    int x = 0;
+    for(int i = 0; i < N; ++i) {
+        x++;
+    }
+    return x;
+};
+
 enum Material {
 	Diffuse,
 	Specular,
@@ -171,28 +180,41 @@ constexpr vec3 trace(const Ray &ray, const array<Sphere, 4> &spheres, const arra
     return finalColor;
 }
 
-void save(string &&fileName, const vec3 *image) {
+void save(string &&fileName, const std::array<std::array<vec3, WIDTH>, HEIGHT> image) {
 
     ofstream outfile(fileName, ios::out | ios::binary);
     
     outfile << "P3\n" << WIDTH << " " << HEIGHT << "\n" << 255 << "\n";
 
-    for (int i = 0; i < resolution; i++) {
+    for (int i = 0; i < WIDTH; i++) {
+        for (int j = 0; j < HEIGHT; j++) {
+            vec3 color = image[i][j];
 
-        vec3 color = image[i];
+            int red = min(color.x * 255.0, 255.0);
+            int green = min(color.y * 255.0, 255.0);
+            int blue = min(color.z * 255.0, 255.0);
 
-        int red = min(color.x * 255.0, 255.0);
-        int green = min(color.y * 255.0, 255.0);
-        int blue = min(color.z * 255.0, 255.0);
-
-        outfile << red << " " << green << " " << blue << " ";
+            outfile << red << " " << green << " " << blue << " ";
+        }
     }
 
     outfile <<  "\n"; //footer
     outfile.close();
 }
 
+template <typename Scene, typename Canvas>
+constexpr void render(const Scene& scene, Canvas& canvas, int width, int height) {
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            const auto point = get_point(width, height, x, y, scene.get_camera());
+            const auto color = trace_ray({ scene.get_camera().pos, point }, scene, 0);
+            canvas.set_pixel(x, y, color);
+        }
+    }
+}
+
 int main() {
+
                                                 //center, radius, color, material
     static constexpr array<Sphere, 4> spheres = {Sphere(vec3(0.0, -10004, -20), 10000, vec3(0.20, 0.20, 0.25), Diffuse), 
                                                  Sphere(vec3(2.0, -2.5, -25), 1.5, vec3(1.0, 0.75, 0.45), Diffuse),
@@ -202,25 +224,28 @@ int main() {
                                                 //pos, color, intensity
     static constexpr array<Light, 1> lights = {Light(vec3(-10.0, 20, -10), vec3(1, 1, 1), 1.0)};
 
-    constexpr vec3 background = { 0, 0, 0 }; //black background
+    static constexpr vec3 background = { 0, 0, 0 }; //black background
 
-    vec3 image[resolution];// = new vec3[resolution]; //array of vec3
-    vec3 *pixels = image;
     static constexpr float invWidth = 1.f / float(WIDTH), invHeight = 1.f / float(HEIGHT);
     static constexpr float fov = 30;
     static constexpr float aspectratio = float(WIDTH) / float(HEIGHT);
     static constexpr float angle = tan(M_PI * 0.5 * fov / 180.);
 
-    for (unsigned y = 0; y < HEIGHT; ++y) {
-         for (unsigned x = 0; x < WIDTH; ++x, ++pixels) {
-            float xx = (2 * ((x + 0.5) * invWidth) - 1) * angle * aspectratio;
-            float yy = (1 - 2 * ((y + 0.5) * invHeight)) * angle;
+    static constexpr std::array<std::array<vec3, WIDTH>, HEIGHT> image = []{
+        array<std::array<vec3, WIDTH>, HEIGHT> canvas{};
 
-            Ray ray = Ray(vec3(0), vec3(xx, yy, -1).normalize());
-            *pixels = trace(ray, spheres, lights, background, 0);
-         }
-    }
+        for (unsigned y = 0; y < HEIGHT; ++y) {
+            for (unsigned x = 0; x < WIDTH; ++x) {
+                float xx = (2 * ((x + 0.5) * invWidth) - 1) * angle * aspectratio;
+                float yy = (1 - 2 * ((y + 0.5) * invHeight)) * angle;
 
+                Ray ray = Ray(vec3(0), vec3(xx, yy, -1).normalize());
+                canvas[y][x] = trace(ray, spheres, lights, background, 0);
+            }
+        }
+        return canvas;
+    }();
+    
     save("Picture.ppm", image);
 
     return 0;
